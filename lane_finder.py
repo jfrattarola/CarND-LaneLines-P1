@@ -4,6 +4,7 @@ import numpy as np
 import cv2
 import math
 import os
+from PIL import Image
 
 def grayscale(img):
     """Applies the Grayscale transform
@@ -96,6 +97,8 @@ def weighted_img(img, initial_img, α=0.8, β=1., λ=0.):
     return cv2.addWeighted(initial_img, α, img, β, λ)
 
 if __name__ == '__main__':
+    if not os.path.exists('test_images_output'):
+        os.makedirs('test_images_output')
     for file in os.listdir('test_images'):
         #read in image
         image = mpimg.imread('test_images/{}'.format(file))
@@ -122,5 +125,8 @@ if __name__ == '__main__':
         #draw the lines on the original image
         image = weighted_img( image_lines, image )
 
+        image_to_save = Image.fromarray(image)
+        image_to_save.save('test_images_output/{}'.format(file))
+        #cv2.imwrite('test_images_output/{}'.format(file), image)
         plt.imshow(image)
         plt.show()
