@@ -103,7 +103,7 @@ def draw_down(img, lines, bottom, dist=6, color=[255,0,0], thickness=2):
         y2 = int(y1+dist*np.cos(slope))
         if y2 >= bottom[1]:
             break
-        if (is_left and x2 <= bottom[0]) or (!is_left and x2 >= bottom[0]):
+        if (is_left and x2 <= bottom[0]) or (not is_left and x2 >= bottom[0]):
             break
         print('Drawing Bottom Gap: ({}, {}), ({}, {})'.format(x1, y1, x2, y2))
         cv2.line(img, (x1,y1), (x2,y2), [0,255,0], thickness)
