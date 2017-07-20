@@ -156,11 +156,11 @@ def draw_lines(img, lines, color=[255, 0, 0], thickness=2):
     #draw sides
     LEFT_BOTTOM = np.array((0,img.shape[0]))
     left_line = np.copy(sides[:right_idx])
-    draw_down(img, left_line, LEFT_BOTTOM, 7, color, 10)
+    draw_down(img, left_line, LEFT_BOTTOM, 10, color, 10)
 
     RIGHT_BOTTOM = np.array((img.shape[1],img.shape[0]))
     right_line = np.copy(sides[right_idx:])
-    draw_down(img,right_line, RIGHT_BOTTOM, 7, color, 10)
+    draw_down(img,right_line, RIGHT_BOTTOM, 10, color, 10)
 
 def hough_lines(img, rho, theta, threshold, min_line_len, max_line_gap):
     """
