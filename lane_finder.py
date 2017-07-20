@@ -59,7 +59,9 @@ def region_of_interest(img, vertices):
 def draw_down(img, lines, bottom, dist=6, color=[255,0,0], thickness=2):
     points = np.zeros((len(lines), 5), dtype=np.int32)
     xtop=1;ytop=2;xbot=3;ybot=4
+    is_left = False
     if bottom[0] == 0:
+        is_left = True
         print('\n========\nIn LEFT Line')
         xtop=3;ytop=4;xbot=1;ybot=2
     else:
@@ -99,7 +101,9 @@ def draw_down(img, lines, bottom, dist=6, color=[255,0,0], thickness=2):
     while True:  
         x2 = int(x1+dist*np.sin(slope))
         y2 = int(y1+dist*np.cos(slope))
-        if x2 <= bottom[0] or y2 >= bottom[1]:
+        if y2 >= bottom[1]:
+            break
+        if (is_left and x2 <= bottom[0]) or (!is_left and x2 >= bottom[0]):
             break
         print('Drawing Bottom Gap: ({}, {}), ({}, {})'.format(x1, y1, x2, y2))
         cv2.line(img, (x1,y1), (x2,y2), [0,255,0], thickness)
