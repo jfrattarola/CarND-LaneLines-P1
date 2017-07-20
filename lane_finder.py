@@ -6,6 +6,13 @@ import math
 import os
 from PIL import Image
 
+#define vars for indices
+SLOPE=0
+X1=1
+Y1=2
+X2=3
+Y2=4
+
 def grayscale(img):
     """Applies the Grayscale transform
     This will return an image with only one color channel
@@ -49,6 +56,57 @@ def region_of_interest(img, vertices):
     return masked_image
 
 
+def draw_down(img, lines, bottom, dist=6, color=[255,0,0], thickness=2):
+    points = np.zeros((len(lines), 5), dtype=np.int32)
+    xtop=1;ytop=2;xbot=3;ybot=4
+    if bottom[0] == 0:
+        print('\n========\nIn LEFT Line')
+        xtop=3;ytop=4;xbot=1;ybot=2
+    else:
+        print('\n========\nIn RIGHT Line')
+    #get distances in order to sort points properly
+    for i, line in enumerate(lines):
+        length = np.linalg.norm(np.array([line[xtop],line[ytop]]) - np.array(bottom[0], bottom[1]))
+        points[i][0] = length
+        points[i][1:] = np.copy(line[1:])
+    dist_sort = points[np.argsort(points[:,0])]
+    slope = lines[int(len(lines)/2)][SLOPE]
+
+    #draw down the array. if not near x==0, finish by calculating the line segments with slope
+    print('SLOPE SORT:\t',lines)
+    print('DIST_SORT:\t',dist_sort)
+    i = len(dist_sort)-1
+    while i > 0:
+        x1 = dist_sort[i][xtop]
+        y1 = dist_sort[i][ytop]
+        x2 = dist_sort[i-1][xtop]
+        y2 = dist_sort[i-1][ytop]
+        print('Drawing: ({}, {}), ({}, {})'.format(x1, y1, x2, y2))
+        cv2.line(img, (x1, y1), (x2, y2), color, thickness)
+        i-=1
+
+    #draw last line
+    x1 = dist_sort[0][xtop]
+    y1 = dist_sort[0][ytop]
+    x2 = dist_sort[0][xbot]
+    y2 = dist_sort[0][ybot]
+    print('Drawing Last Line: ({}, {}), ({}, {})'.format(x1, y1, x2, y2))
+    cv2.line(img, (x1,y1), (x2,y2), [0,0,255], thickness)
+
+    #is there a gap at the bottom? fill it in
+    x1 = x2
+    y1 = y2
+    while True:  
+        x2 = int(x1+dist*np.sin(slope))
+        y2 = int(y1+dist*np.cos(slope))
+        if x2 <= bottom[0] or y2 >= bottom[1]:
+            break
+        print('Drawing Bottom Gap: ({}, {}), ({}, {})'.format(x1, y1, x2, y2))
+        cv2.line(img, (x1,y1), (x2,y2), [0,255,0], thickness)
+        x1 = x2
+        y1 = y2        
+
+
 def draw_lines(img, lines, color=[255, 0, 0], thickness=2):
     """
     NOTE: this is the function you might want to use as a starting point once you want to 
@@ -66,9 +124,39 @@ def draw_lines(img, lines, color=[255, 0, 0], thickness=2):
     If you want to make the lines semi-transparent, think about combining
     this function with the weighted_img() function below
     """
-    for line in lines:
+
+    #calculate the slope of each line segment in order to figure out which side
+    #the segment belongs
+    THRESHOLD=0.2
+    lines_with_slope=np.zeros((len(lines), 5))
+    for i, line in enumerate(lines):
         for x1,y1,x2,y2 in line:
-            cv2.line(img, (x1, y1), (x2, y2), color, thickness)
+            slope = (y2-y1)/(x2-x1)
+            lines_with_slope[i][0] = slope
+            lines_with_slope[i][1:] = np.copy(line)
+            cv2.line(img, (x1, y1), (x2,y2), color, thickness)
+#            length = np.linalg.norm(np.array([x2,y2]) - np.array([x1,y1]))
+
+    #sort the array by slope
+    sides = lines_with_slope[np.argsort(lines_with_slope[:,0])]
+
+    #now, advance in sorted sides until you reach a slope that belongs to left
+    #side of the lane (right side will be negative...thus at beginning)
+    prev = sides[0]
+    right_idx=1     
+    while right_idx < len(sides) and (sides[right_idx][SLOPE]-prev[SLOPE]) <= THRESHOLD:
+        prev = sides[right_idx]
+        right_idx += 1
+
+
+    #draw sides
+    LEFT_BOTTOM = np.array((0,img.shape[0]))
+    left_line = np.copy(sides[:right_idx])
+    draw_down(img, left_line, LEFT_BOTTOM, 7, color, 10)
+
+    RIGHT_BOTTOM = np.array((img.shape[1],img.shape[0]))
+    right_line = np.copy(sides[right_idx:])
+    draw_down(img,right_line, RIGHT_BOTTOM, 7, color, 10)
 
 def hough_lines(img, rho, theta, threshold, min_line_len, max_line_gap):
     """
@@ -76,7 +164,9 @@ def hough_lines(img, rho, theta, threshold, min_line_len, max_line_gap):
         
     Returns an image with hough lines drawn.
     """
+    #getting line segments using the probabilistic Hough transform
     lines = cv2.HoughLinesP(img, rho, theta, threshold, np.array([]), minLineLength=min_line_len, maxLineGap=max_line_gap)
+
     line_img = np.zeros((img.shape[0], img.shape[1], 3), dtype=np.uint8)
     draw_lines(line_img, lines)
     return line_img
@@ -120,7 +210,7 @@ if __name__ == '__main__':
         masked_edges = region_of_interest(edges, vertices)
 
         #convert masked image to an image with hough lines drawn
-        image_lines = hough_lines(masked_edges, 1, np.pi/180, 1, 10, 10)
+        image_lines = hough_lines(masked_edges, 2, np.pi/180, 20, 25, 15)
 
         #draw the lines on the original image
         image = weighted_img( image_lines, image )
