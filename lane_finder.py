@@ -203,6 +203,6 @@ if __name__ == '__main__':
         image_to_save = Image.fromarray(image)
         image_to_save.save('test_images_output/{}'.format(file))
 
-        image_to_show = gray_image
+        image_to_show = image
         plt.imshow(image_to_show, cmap='gray')
         plt.show()
