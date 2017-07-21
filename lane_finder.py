@@ -8,10 +8,19 @@ from PIL import Image
 
 #define vars for indices
 SLOPE=0
-X1=1
-Y1=2
-X2=3
-Y2=4
+X1=4
+Y1=5
+X2=6
+Y2=7
+INTERCEPT1=1
+INTERCEPT2=2
+LENGTH=3
+
+#define poly coords
+POLY_LEFT_BOT=(80, 540)
+POLY_LEFT_TOP=(420,330)
+POLY_RIGHT_TOP=(520,330)
+POLY_RIGHT_BOT=(900,540)
 
 def grayscale(img):
     """Applies the Grayscale transform
@@ -56,59 +65,33 @@ def region_of_interest(img, vertices):
     return masked_image
 
 
-def draw_down(img, lines, bottom, dist=6, color=[255,0,0], thickness=2):
-    points = np.zeros((len(lines), 5), dtype=np.int32)
-    xtop=1;ytop=2;xbot=3;ybot=4
-    is_left = False
-    if bottom[0] == 0:
-        is_left = True
-        print('\n========\nIn LEFT Line')
-        xtop=3;ytop=4;xbot=1;ybot=2
-    else:
-        print('\n========\nIn RIGHT Line')
-    #get distances in order to sort points properly
-    for i, line in enumerate(lines):
-        length = np.linalg.norm(np.array([line[xtop],line[ytop]]) - np.array(bottom[0], bottom[1]))
-        points[i][0] = length
-        points[i][1:] = np.copy(line[1:])
-    dist_sort = points[np.argsort(points[:,0])]
-    slope = lines[int(len(lines)/2)][SLOPE]
+def draw_side(img, lines, color=[255,0,0], thickness=2):
+    #figure out which which top corner to use for distance metrics and 
+    #which point references the top of the line segment
+    xtop=X1;ytop=Y1;xbot=X2;ybot=Y2
+    top = POLY_RIGHT_TOP
+    if lines[0][SLOPE] <= 0.0:
+        top=POLY_LEFT_TOP
+        xtop=X2;ytop=Y2;xbot=X1;ybot=Y1
 
-    #draw down the array. if not near x==0, finish by calculating the line segments with slope
-    print('SLOPE SORT:\t',lines)
-    print('DIST_SORT:\t',dist_sort)
-    i = len(dist_sort)-1
-    while i > 0:
-        x1 = dist_sort[i][xtop]
-        y1 = dist_sort[i][ytop]
-        x2 = dist_sort[i-1][xtop]
-        y2 = dist_sort[i-1][ytop]
-        print('Drawing: ({}, {}), ({}, {})'.format(x1, y1, x2, y2))
-        cv2.line(img, (x1, y1), (x2, y2), color, thickness)
-        i-=1
-
-    #draw last line
-    x1 = dist_sort[0][xtop]
-    y1 = dist_sort[0][ytop]
-    x2 = dist_sort[0][xbot]
-    y2 = dist_sort[0][ybot]
-    print('Drawing Last Line: ({}, {}), ({}, {})'.format(x1, y1, x2, y2))
-    cv2.line(img, (x1,y1), (x2,y2), [0,0,255], thickness)
-
-    #is there a gap at the bottom? fill it in
-    x1 = x2
-    y1 = y2
-    while True:  
-        x2 = int(x1+dist*np.sin(slope))
-        y2 = int(y1+dist*np.cos(slope))
-        if y2 >= bottom[1]:
-            break
-        if (is_left and x2 <= bottom[0]) or (not is_left and x2 >= bottom[0]):
-            break
-        print('Drawing Bottom Gap: ({}, {}), ({}, {})'.format(x1, y1, x2, y2))
-        cv2.line(img, (x1,y1), (x2,y2), [0,255,0], thickness)
-        x1 = x2
-        y1 = y2        
+    #find topmost point
+    start_points = (int(lines[0][xtop]), int(lines[0][ytop]))
+    top_length = np.linalg.norm(np.array(start_points) - np.array(top))
+    sum_slope=lines[0][SLOPE]
+    sum_intercept=lines[0][INTERCEPT1] + lines[0][INTERCEPT2]
+    i=1
+    while i < len(lines):
+        length = np.linalg.norm(np.array((int(lines[i][xtop]), int(lines[i][ytop]))) - np.array(top))
+        sum_slope += lines[0][SLOPE]
+        sum_intercept += (lines[0][INTERCEPT1] + lines[0][INTERCEPT2])
+        if length < top_length:
+            top_length = length
+            start_points = (int(lines[i][xtop]), int(lines[i][ytop]))
+        i+=1
+    slope = sum_slope/len(lines)
+    intercept = sum_intercept/(len(lines)*2)
+    x = int((-1 * (intercept/slope)) + (POLY_RIGHT_BOT[1]/slope))
+    cv2.line(img, start_points, (x, POLY_RIGHT_BOT[1]), color, thickness)
 
 
 def draw_lines(img, lines, color=[255, 0, 0], thickness=2):
@@ -131,36 +114,30 @@ def draw_lines(img, lines, color=[255, 0, 0], thickness=2):
 
     #calculate the slope of each line segment in order to figure out which side
     #the segment belongs
-    THRESHOLD=0.2
-    lines_with_slope=np.zeros((len(lines), 5))
+    lines_eq=np.zeros((len(lines), 8))
     for i, line in enumerate(lines):
         for x1,y1,x2,y2 in line:
             slope = (y2-y1)/(x2-x1)
-            lines_with_slope[i][0] = slope
-            lines_with_slope[i][1:] = np.copy(line)
-            cv2.line(img, (x1, y1), (x2,y2), color, thickness)
-#            length = np.linalg.norm(np.array([x2,y2]) - np.array([x1,y1]))
+            lines_eq[i][SLOPE] = slope
+            lines_eq[i][X1:] = np.copy(line)
+            lines_eq[i][INTERCEPT1] = y1 - slope * x1
+            lines_eq[i][INTERCEPT2] = y2 - slope * x2
 
     #sort the array by slope
-    sides = lines_with_slope[np.argsort(lines_with_slope[:,0])]
+    sides = lines_eq[np.argsort(lines_eq[:,0])]
 
     #now, advance in sorted sides until you reach a slope that belongs to left
     #side of the lane (right side will be negative...thus at beginning)
-    prev = sides[0]
     right_idx=1     
-    while right_idx < len(sides) and (sides[right_idx][SLOPE]-prev[SLOPE]) <= THRESHOLD:
-        prev = sides[right_idx]
+    while right_idx < len(sides) and sides[right_idx][SLOPE] <= 0.0:
         right_idx += 1
 
-
     #draw sides
-    LEFT_BOTTOM = np.array((0,img.shape[0]))
     left_line = np.copy(sides[:right_idx])
-    draw_down(img, left_line, LEFT_BOTTOM, 10, color, 10)
+    draw_side(img, left_line, color, 10)
 
-    RIGHT_BOTTOM = np.array((img.shape[1],img.shape[0]))
     right_line = np.copy(sides[right_idx:])
-    draw_down(img,right_line, RIGHT_BOTTOM, 10, color, 10)
+    draw_side(img,right_line, color, 10)
 
 def hough_lines(img, rho, theta, threshold, min_line_len, max_line_gap):
     """
@@ -208,7 +185,7 @@ if __name__ == '__main__':
 
         #define a polygon to use as the image mask
         imshape = blur_gray_image.shape
-        vertices = np.array([[(80, imshape[0]), (421,330), (521, 330), (900, imshape[0])]], dtype=np.int32)
+        vertices = np.array([[POLY_LEFT_BOT, POLY_LEFT_TOP, POLY_RIGHT_TOP, POLY_RIGHT_BOT]], dtype=np.int32)
 
         # apply vertices as an image mask to the image
         masked_edges = region_of_interest(edges, vertices)
